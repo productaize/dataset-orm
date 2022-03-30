@@ -21,5 +21,3 @@ class City(Model):
 class QueryResultModel(ResultModel):
     firstname = Column(types.string)
     lastname = Column(types.string)
-
-

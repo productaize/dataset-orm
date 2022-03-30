@@ -13,7 +13,7 @@ from tests.examples import User, QueryResultModel, City
 class DatasetOrmTests(TestCase):
     def setUp(self):
         db_url = os.environ.get('TEST_DATABASE_URL', 'sqlite:///testdb.sqlite3')
-        self.db = db = connect(db_url, recreate=True)
+        self.db = connect(db_url, recreate=True)
 
     def test_model_create_retrieve(self):
         user = User(username='john').save()
@@ -174,11 +174,11 @@ class DatasetOrmTests(TestCase):
 
     def test_query_auto_resultmodel(self):
         User(username='john walker', is_nice=True).save()
-        sql = '''
+        sql = check_sql(self.db, '''
         select substring(username, 1, 4) as firstname
              , substring(username, 6, 10) as lastname
         from ":t"
-        '''
+        ''')
         results = User.objects.query(sql).first()
         self.assertIsInstance(results, ResultModel)
         self.assertEqual(results.firstname, 'john')
@@ -186,11 +186,11 @@ class DatasetOrmTests(TestCase):
 
     def test_query_custom_resultmodel(self):
         User(username='john walker', is_nice=True).save()
-        sql = '''
+        sql = check_sql(self.db, '''
         select substring(username, 1, 4) as firstname
              , substring(username, 6, 10) as lastname
         from ":t"
-        '''
+        ''')
         results = User.objects.query(sql, model=QueryResultModel).first()
         self.assertIsInstance(results, QueryResultModel)
         self.assertEqual(results.firstname, 'john')
@@ -260,3 +260,9 @@ class DatasetOrmTests(TestCase):
             self.assertIsInstance(country, Country)
             self.assertIn('name', country.to_dict())
             self.assertIn('name', country.columns)
+
+
+def check_sql(db, sql):
+    if "sqlite" in db.engine.dialect.name:
+        sql = sql.replace('substring', 'substr')
+    return sql

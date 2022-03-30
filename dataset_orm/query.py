@@ -19,7 +19,7 @@ class ModelQuery:
     def all(self, **kwargs):
         kwargs['order_by'] = self.model._spec.primary_id
         kwargs.update(**kwargs)
-        query = lambda: (self.model._from_db(**row) for row in self.model.table.all(**kwargs))
+        query = lambda: (self.model._from_db(**row) for row in self.model.table.all(**kwargs)) # noqa
         return QueryResult(query)
 
     def find(self, *_clauses, **kwargs):
@@ -27,7 +27,7 @@ class ModelQuery:
         self._build_query_clauses(kwargs)
         kwargs['order_by'] = self.model._spec.primary_id
         kwargs.update(**kwargs)
-        query = lambda: (self.model._from_db(**row) for row in self.model.table.find(*_clauses, **kwargs))
+        query = lambda: (self.model._from_db(**row) for row in self.model.table.find(*_clauses, **kwargs)) # noqa
         return QueryResult(query)
 
     def find_one(self, *_clauses, **kwargs):
@@ -67,7 +67,7 @@ class ModelQuery:
         if column_mismatch:
             model = model if issubclass(model, ResultModel) else ResultModel
             model.use(self.model._db)
-        query = lambda: (model._from_db(**row) for row in result)
+        query = lambda: (model._from_db(**row) for row in result) # noqa
         return QueryResult(query)
 
     def _build_query_clauses(self, kwargs):
