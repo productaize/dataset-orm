@@ -71,7 +71,7 @@ class TableSpec:
 
     def __init__(self, table_name=None, primary_id=None, primary_type=None,
                  primary_increment=None, auto_create=None):
-        ifnotnone = lambda v, other: v if v is not None else other
+        ifnotnone = lambda v, other: v if v is not None else other # noqa
         self.table_name = ifnotnone(table_name, self.table_name)
         self.primary_id = ifnotnone(primary_id, self.primary_id)
         self.primary_type = ifnotnone(primary_type, self.primary_type)
@@ -80,7 +80,7 @@ class TableSpec:
         self.columns = dict()
 
     def __set_name__(self, model, name):
-        camel2snake = lambda v: re.sub(r'(?<!^)(?=[A-Z])', '_', v).lower()
+        camel2snake = lambda v: re.sub(r'(?<!^)(?=[A-Z])', '_', v).lower() # noqa
         self.model = model
         if not hasattr(model, '_spec'):
             model._spec_init()
