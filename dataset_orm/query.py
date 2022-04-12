@@ -42,6 +42,8 @@ class ModelQuery:
             kwargs['id'] = kwargs.pop('pk')
         kwargs.update(**kwargs)
         row = self.model.table.find_one(*_clauses, **kwargs)
+        if row is None:
+            raise ValueError(f'cannot find row for {_clauses} {kwargs}')
         return self.model._from_db(**row)
 
     def query(self, statement, *args, placeholder=':t', model=None, **kwargs):

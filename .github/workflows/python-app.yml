@@ -40,7 +40,7 @@ jobs:
         pip install -e .[mssql]
         docker-compose down
         docker-compose up -d mssql
-        sleep 5
+        sleep 10
         scripts/createdb-mssql.sh
         pytest
 
