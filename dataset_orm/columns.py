@@ -1,7 +1,7 @@
 import json
 
 import dataset
-from dataset.types import Types, JSON
+from dataset.types import Types, JSON, String
 from sqlalchemy import LargeBinary
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -53,6 +53,13 @@ class Column:
     def to_python_json(self, value):
         return json.loads(value) if value is not None else {}
 
+    def to_db_file(self, value):
+        return value
+
+    def to_python_file(self, value):
+        from dataset_orm.files import DatasetFile
+        return DatasetFile.objects.get(filename=value)
+
     def type_for_database(self, db):
         type_map = self.ColumnTypes._engine_types.get(db.engine.dialect.name, {})
         return type_map.get(self.db_type, self.db_type)
@@ -69,6 +76,7 @@ class Column:
     class ColumnTypes(dataset.types.Types):
         json = JSON
         binary = LargeBinary
+        file = String
 
         # engine.dialect.name => type
         _engine_types = {
@@ -82,6 +90,7 @@ class Column:
         _type_key = {
             json: 'json',
             binary: 'binary',
+            file: 'file',
             dataset.types.Types.string: 'string',
             dataset.types.Types.bigint: 'bigint',
             dataset.types.Types.date: 'date',
