@@ -71,4 +71,3 @@ Store and access any data types, including json and binary values
         user.picture = fimg.read()  
         user.save()
         
-             
