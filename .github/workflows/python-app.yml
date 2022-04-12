@@ -31,6 +31,16 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
+    - name: Test with sqlite
       run: |
         pytest
+    - name: Test with sqlserver
+      run: |
+        export TEST_DATABASE_URL="mssql+pyodbc://SA:Denteriarlly8!@localhost/testdb?driver=ODBC+Driver+17+for+SQL+Server&encrypt=no&MARS_Connection=Yes"
+        pip install -e .[mssql]
+        docker-compose down
+        docker-compose up -d mssql
+        sleep 5
+        scripts/createdb-mssql.sh
+        pytest
+
