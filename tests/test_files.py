@@ -1,6 +1,10 @@
 import os
 import unittest
+from functools import partial
 from io import BytesIO
+from timeit import timeit
+
+from unittest import skip
 
 from dataset_orm import connect
 from dataset_orm.files import DatasetFilePart, DatasetFile, FileLike
@@ -13,6 +17,10 @@ class DatasetFileTests(unittest.TestCase):
         # https://docs.sqlalchemy.org/en/14/dialects/sqlite.html#threading-pooling-behavior
         engine_kwargs = dict(connect_args=dict(check_same_thread=False)) if 'sqlite' in db_url else None
         self.db = connect(db_url, recreate=True, engine_kwargs=engine_kwargs)
+        print(db_url)
+
+    def tearDown(self):
+        self.db.close()
 
     def test_filemodel_bare(self):
         # bare chunking / read back test
@@ -123,6 +131,45 @@ class DatasetFileTests(unittest.TestCase):
         cimage.imagefile.remove()
         with self.assertRaises(FileNotFoundError):
             cimage.imagefile.read()
+
+    @skip("for interactive use only")
+    def test_parallel_write_performance(self):
+        with open('/tmp/testfile', 'wb') as fout:
+            fout.write(b'thedogjumpsoverthelazyfox' * 100000)
+
+        def write(chunksize=None):
+            with open('/tmp/testfile', 'rb') as fin:
+                with DatasetFile.open(f'testfile-{chunksize}', 'w') as testf:
+                    testf.write(fin, chunksize=chunksize)
+
+        t_seq = timeit(partial(write, chunksize=-1), number=1)
+        t_small = timeit(partial(write, chunksize=255), number=1)
+        t_large = timeit(partial(write, chunksize=1024*512), number=1)
+        print(t_seq, t_small, t_large)
+
+    @skip("for interactive use only")
+    def test_parallel_read_performance(self):
+        with open('/tmp/testfile', 'wb') as fout:
+            # 10'000 = 240KB
+            # 100'000 = 2.4M
+            fout.write(b'thedogjumpsoverthelazyfox' * 1000000)
+
+        def write(chunksize=None):
+            with open('/tmp/testfile', 'rb') as fin:
+                with DatasetFile.open(f'testfile', 'w') as testf:
+                    testf.write(fin, chunksize=chunksize)
+
+        def read(chunksize=None):
+            with DatasetFile.open(f'testfile', 'r') as testf:
+                data = testf.read()
+
+        write(chunksize=-1)
+        t_seq = timeit(read, number=3)
+        write(chunksize=1024*512)
+        t_small = timeit(read, number=3)
+        write(chunksize=1024*64)
+        t_large = timeit(read, number=3)
+        print(t_seq, t_small, t_large)
 
     if __name__ == '__main__':
         unittest.main()

@@ -1,4 +1,5 @@
 import re
+from copy import copy
 
 import dataset
 from dataset import Table
@@ -102,6 +103,7 @@ class TableSpec:
         for colname, column in self.columns.items():
             table.create_column(colname, column.type_for_database(db),
                                 **column.column_kwargs)
+        table._sync_columns = lambda row, ensure, types=None: row
         return self
 
     def drop_table(self):
@@ -181,11 +183,12 @@ class Model:
     _objects_cls = ModelQuery
 
     def __init__(self, **values):
+        columns = self.columns
         self.__dict__['_values'] = {
             k: v for k, v in values.items()
-            if k in self._spec.columns or k == self._spec.primary_id
+            if k in columns or k == self._spec.primary_id
         }
-        for k, col in self._spec.columns.items():
+        for k, col in columns.items():
             if k == self._spec.primary_id:
                 continue
             self.__dict__['_values'].setdefault(k, col.default)
@@ -257,6 +260,14 @@ class Model:
         """ The table columns as used to create the dataset.Table """
         return cls._spec.columns
 
+    @classmethod
+    def save_many(cls, models, chunk_size=1000):
+        """ Save many models from a sequence. This will not update the models with pks """
+        # if the primary key is autoincrement, we drop it bc the db will assign a value
+        to_drop = [cls._spec.primary_id] if cls.table._primary_increment else None
+        rows = (m._to_db(drop=to_drop) for m in models)
+        cls.table.insert_many(list(rows), chunk_size=chunk_size)
+
     @property
     def pk(self):
         """ return the primary key """
@@ -265,12 +276,14 @@ class Model:
     def save(self):
         """ save the model instance """
         if self.pk is None:
-            pk = self.table.insert(self._to_db(drop=[self._spec.primary_id]))
+            # if the primary key is autoincrement, we drop it bc the db will assign a value
+            to_drop = [self._spec.primary_id] if self.table._primary_increment else None
+            pk = self.table.insert(self._to_db(drop=to_drop))
             # table.insert returns True or the actual primary key value
             if not isinstance(pk, bool):
                 setattr(self, self._spec.primary_id, pk)
         else:
-            self.table.update(self._to_db(), [self._spec.primary_id])
+            self.table.upsert(self._to_db(), [self._spec.primary_id])
         return self
 
     def refresh(self):

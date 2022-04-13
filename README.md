@@ -71,3 +71,23 @@ Store and access any data types, including json and binary values
         user.picture = fimg.read()  
         user.save()
         
+Use the file column type for transparently storing binary data:
+
+
+    class Image(Model):
+        imagefile = Column(types.file)
+
+
+Usage:
+
+    img = Image()
+    with open('/path/to/image') as f:
+       img.imagefile.write(f)
+    img.save()
+    data = img.imagefile.read()
+
+
+The imagefile field is the filename of a dataset_orm.files.DatasetFile. The file's data 
+is split in chunks and written to the database in multiple parts. On reading back, the 
+chunks are retrieved from the db in parallel, in order to improve performance for large 
+files. Tests indicate a 25% speed up is possible v.v. a single BLOB. 
