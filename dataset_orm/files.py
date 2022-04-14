@@ -1,5 +1,5 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from itertools import repeat
 
@@ -55,7 +55,7 @@ class FilesMixin:
 
 class FileLike:
     # a multithreaded file-like API to DatasetFile
-    chunksize = 1024 * 256  # 256KB file parts
+    chunksize = 1024 * 256  # 256KB file parts, these show the best average read performance on sqlite + mssql
     # testing resulted in deadlocks due to too many threads, blocking on BytesIO.read() calls
     # backport from python 3.8, see https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
     max_workers = min(32, os.cpu_count() + 4)
@@ -154,15 +154,20 @@ class FileLike:
         # retrieve all parts in parallel, in batches
         buffer = BytesIO()
         read_size = 0
+
         with ThreadPoolExecutor(max_workers=self.max_workers,
                                 thread_name_prefix='dataset-orm-read') as tp:
+            # build jobs, each job reads a range of file parts
+            jobs: list[int, int, int] # start_no, file_id, batchsize
             jobs = zip(range(0, self._dsfile.parts, batchsize),
                        repeat(self._dsfile.id), repeat(batchsize))
-            batches = tp.map(_read_part, jobs)
-        # combine parts in right order, each batch is sorted already
-        for start_no, batch_data in sorted(batches, key=lambda v: v[0]):
+            # submit jobs and sort by starting part_no
+            results: list[int, list]  # part_no, batch_data
+            results = sorted(tp.map(_read_part, jobs), key=lambda v: v[0])
+            # combine parts
+            batch_data = (batch_data for start_no, batch_data in results)
             for part_data in batch_data:
-                buffer.write(part_data)
+                buffer.write(b''.join(part_data))
                 read_size += len(part_data)
                 if read_size >= size > -1:
                     break

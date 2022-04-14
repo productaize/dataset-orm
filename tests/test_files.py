@@ -163,12 +163,13 @@ class DatasetFileTests(unittest.TestCase):
             with DatasetFile.open(f'testfile', 'r') as testf:
                 data = testf.read()
 
+        N = 30
         write(chunksize=-1)
-        t_seq = timeit(read, number=3)
+        t_seq = timeit(read, number=N)
         write(chunksize=1024*512)
-        t_small = timeit(read, number=3)
-        write(chunksize=1024*64)
-        t_large = timeit(read, number=3)
+        t_small = timeit(read, number=N)
+        write(chunksize=1024*256)
+        t_large = timeit(read, number=N)
         print(t_seq, t_small, t_large)
 
     if __name__ == '__main__':
