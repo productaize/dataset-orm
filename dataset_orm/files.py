@@ -52,6 +52,14 @@ class FilesMixin:
     def list(cls):
         return cls.find('*')
 
+    @classmethod
+    def write(cls, filename, data, mode='w'):
+        return DatasetFile.open(filename, mode=mode).write(data)
+
+    @classmethod
+    def read(cls, filename):
+        return DatasetFile.open(filename, mode='r').read()
+
 
 class FileLike:
     # a multithreaded file-like API to DatasetFile
@@ -95,6 +103,7 @@ class FileLike:
 
         def _write_parts(*parts):
             DatasetFilePart.save_many(parts)
+            DatasetFilePart._db.commit()
 
         # When using SQLite, this may result in "not the same thread" exceptions raised on program exit.
         # To avoid, use the check_same_thread=False argument on connecting
@@ -158,7 +167,7 @@ class FileLike:
         with ThreadPoolExecutor(max_workers=self.max_workers,
                                 thread_name_prefix='dataset-orm-read') as tp:
             # build jobs, each job reads a range of file parts
-            jobs: list[int, int, int] # start_no, file_id, batchsize
+            jobs: list[int, int, int]  # start_no, file_id, batchsize
             jobs = zip(range(0, self._dsfile.parts, batchsize),
                        repeat(self._dsfile.id), repeat(batchsize))
             # submit jobs and sort by starting part_no
@@ -209,3 +218,13 @@ class DatasetFilePart(Model):
     file_id = Column(types.integer, index=True)
     part_no = Column(types.integer, index=True)
     data = Column(types.binary)
+
+
+# public methods
+open = DatasetFile.open
+remove = DatasetFile.remove
+exists = DatasetFile.exists
+find = DatasetFile.find
+list = DatasetFile.list
+write = DatasetFile.write
+read = DatasetFile.read
