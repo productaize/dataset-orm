@@ -5,7 +5,7 @@ with open('README.md', 'r') as fin:
 
 setup(
     name='dataset-orm',
-    version='0.1',
+    version='0.2',
     packages=find_packages(exclude=["ez_setup", "examples", "test"]),
     url='',
     license='MIT',
