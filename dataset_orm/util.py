@@ -3,9 +3,9 @@ import dataset
 from dataset_orm import Model
 
 
-def connect(url, recreate=False):
+def connect(url, recreate=False, **kwargs):
     # auto connect all registered models
-    db = dataset.connect(url)
+    db = dataset.connect(url, **kwargs)
     setup_models(db, recreate=recreate)
     return db
 

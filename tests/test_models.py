@@ -27,9 +27,11 @@ class DatasetOrmTests(TestCase):
 
     def test_multiple_models(self):
         user = User(username='john').save()
-        city = City(name='London').save()
+        City(name='London').save()
+        # since City.name is a primary key we can use it to query
+        city2 = City.objects.get(pk='London')
         self.assertEqual(user.pk, 1)
-        self.assertEqual(city.pk, 'London')
+        self.assertEqual(city2.pk, 'London')
         raw_db = (dict(row) for row in self.db['user'].all(order_by='id'))
         raw_model = (m.to_dict() for m in user.objects.all(order_by='id'))
         for db, model in zip(raw_db, raw_model):
@@ -37,6 +39,23 @@ class DatasetOrmTests(TestCase):
             db.pop('attributes')
             model.pop('attributes')
             self.assertEqual(db, model)
+
+    def test_save_many(self):
+        users = []
+        for i in range(10):
+            users.append(User(username=f'user{i}'))
+        User.save_many(users)
+        users_indb = User.objects.find().as_list()
+        self.assertEqual(len(users_indb), len(users))
+        self.assertTrue(all(u.pk is not None for u in users_indb))
+
+    def test_save_many_custom_pk(self):
+        cities = []
+        for i in range(10):
+            cities.append(City(name=f'London-{i}'))
+        City.save_many(cities)
+        cities_indb = City.objects.find().as_list()
+        self.assertEqual(len(cities_indb), len(cities))
 
     def test_model_delete(self):
         user = User(username='john').save()

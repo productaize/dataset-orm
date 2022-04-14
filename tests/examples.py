@@ -18,6 +18,10 @@ class City(Model):
     _spec = TableSpec(primary_id='name', primary_type=types.string(length=100))
 
 
+class Image(Model):
+    imagefile = Column(types.file)
+
+
 class QueryResultModel(ResultModel):
     firstname = Column(types.string)
     lastname = Column(types.string)

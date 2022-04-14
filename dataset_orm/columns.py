@@ -1,7 +1,8 @@
 import json
+from uuid import uuid4
 
 import dataset
-from dataset.types import Types, JSON
+from dataset.types import Types, JSON, String
 from sqlalchemy import LargeBinary
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -17,6 +18,7 @@ class Column:
         typecls = self.type_key(db_type)
         self.to_db = getattr(self, f'to_db_{typecls}', self.to_db)
         self.to_python = getattr(self, f'to_python_{typecls}', self.to_python)
+        self.default_value = getattr(self, f'default_{typecls}', self.default_value)
         if model and not name:
             raise ValueError('Must specify name= and model=, or just name=')
         if model:
@@ -41,6 +43,24 @@ class Column:
     def __set__(self, obj, value):
         obj._values[self.name] = value
 
+    @property
+    def default(self):
+        return self.default_value()
+
+    def default_value(self):
+        value = self.column_kwargs.get('default')
+        return value if not callable(value) else value()
+
+    def default_file(self):
+        from dataset_orm.files import DatasetFile
+        return DatasetFile.open(uuid4().hex, 'rw')
+
+    def default_integer(self):
+        return 0
+
+    def default_float(self):
+        return 0.0
+
     def to_db(self, value):
         return value
 
@@ -52,6 +72,14 @@ class Column:
 
     def to_python_json(self, value):
         return json.loads(value) if value is not None else {}
+
+    def to_db_file(self, value):
+        return value.name
+
+    def to_python_file(self, value):
+        from dataset_orm.files import DatasetFile,  FileLike
+        dsfile = DatasetFile.objects.get(filename=value)
+        return FileLike(dsfile).open('rw')
 
     def type_for_database(self, db):
         type_map = self.ColumnTypes._engine_types.get(db.engine.dialect.name, {})
@@ -69,6 +97,7 @@ class Column:
     class ColumnTypes(dataset.types.Types):
         json = JSON
         binary = LargeBinary
+        file = String
 
         # engine.dialect.name => type
         _engine_types = {
@@ -82,6 +111,7 @@ class Column:
         _type_key = {
             json: 'json',
             binary: 'binary',
+            file: 'file',
             dataset.types.Types.string: 'string',
             dataset.types.Types.bigint: 'bigint',
             dataset.types.Types.date: 'date',

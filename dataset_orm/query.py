@@ -17,7 +17,7 @@ class ModelQuery:
         self.model = model
 
     def all(self, **kwargs):
-        kwargs['order_by'] = self.model._spec.primary_id
+        kwargs.setdefault('order_by', self.model._spec.primary_id)
         kwargs.update(**kwargs)
         query = lambda: (self.model._from_db(**row) for row in self.model.table.all(**kwargs)) # noqa
         return QueryResult(query)
@@ -25,7 +25,7 @@ class ModelQuery:
     def find(self, *_clauses, **kwargs):
         """ Return all model instances for the given clause """
         self._build_query_clauses(kwargs)
-        kwargs['order_by'] = self.model._spec.primary_id
+        kwargs.setdefault('order_by', self.model._spec.primary_id)
         kwargs.update(**kwargs)
         query = lambda: (self.model._from_db(**row) for row in self.model.table.find(*_clauses, **kwargs)) # noqa
         return QueryResult(query)
@@ -37,11 +37,13 @@ class ModelQuery:
     def get(self, *_clauses, **kwargs):
         """ Return a single model instance for the given clause """
         self._build_query_clauses(kwargs)
-        kwargs['order_by'] = self.model._spec.primary_id
+        kwargs.setdefault('order_by', self.model._spec.primary_id)
         if 'pk' in kwargs:
             kwargs['id'] = kwargs.pop('pk')
         kwargs.update(**kwargs)
         row = self.model.table.find_one(*_clauses, **kwargs)
+        if row is None:
+            raise ValueError(f'cannot find row for {_clauses} {kwargs}')
         return self.model._from_db(**row)
 
     def query(self, statement, *args, placeholder=':t', model=None, **kwargs):
@@ -120,7 +122,8 @@ class QueryResult:
             yield m.to_dict()
 
     def first(self):
-        return self.as_list()[0]
+        allobjs = self.as_list()
+        return allobjs[0] if len(allobjs) > 0 else None
 
     def last(self):
         return self.as_list()[-1]
