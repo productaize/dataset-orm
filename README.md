@@ -91,3 +91,26 @@ The imagefile field is the filename of a dataset_orm.files.DatasetFile. The file
 is split in chunks and written to the database in multiple parts. On reading back, the 
 chunks are retrieved from the db in parallel, in order to improve performance for large 
 files. Tests indicate a 25% speed up is possible v.v. a single BLOB. 
+
+Use the `dataset.files` direct API to get a filesystem-like API to binary data stored
+in the database:
+
+    from dataset_orm import files
+
+    connect('sqlite:///test.sqlite')
+
+    files.write('myfile', b'some data')
+    files.read('myfile')
+    => b'some data'
+
+    files.exists('myfile') 
+    => True
+    
+    files.list()
+    => ['myfile']
+
+    files.find('*file*')
+    => ['myfile']
+
+    files.remove('myfile')
+

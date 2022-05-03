@@ -14,9 +14,7 @@ from tests.examples import Image
 class DatasetFileTests(unittest.TestCase):
     def setUp(self):
         db_url = os.environ.get('TEST_DATABASE_URL', 'sqlite:///testdb.sqlite3')
-        # https://docs.sqlalchemy.org/en/14/dialects/sqlite.html#threading-pooling-behavior
-        engine_kwargs = dict(connect_args=dict(check_same_thread=False)) if 'sqlite' in db_url else None
-        self.db = connect(db_url, recreate=True, engine_kwargs=engine_kwargs)
+        self.db = connect(db_url, recreate=True)
         print(db_url)
 
     def tearDown(self):
@@ -51,14 +49,27 @@ class DatasetFileTests(unittest.TestCase):
         self.assertNotEqual(read_back.getvalue(), data.getvalue())
 
     def test_filelike(self):
-        data = BytesIO(b'thedogjumpsoverthelazyfox' * 1000)
+        data = BytesIO(b'thedogjumpsoverthelazyfox')
         with DatasetFile.open('testfile', 'w') as testf:
             testf.write(data)
+        self.assertTrue(len(DatasetFilePart.objects.all().as_list()) > 0)
         with DatasetFile.open('testfile') as testf:
             read_back = testf.read()
         self.assertEqual(data.getvalue(), read_back)
         self.assertEqual(testf.size, len(data.getvalue()))
         self.assertEqual(testf.size, len(read_back))
+
+    def test_files_api(self):
+        from dataset_orm import files
+        data = b'foobar'
+        files.write('testfile', data)
+        read_back = files.read('testfile')
+        self.assertEqual(data, read_back)
+        self.assertTrue(files.exists('testfile'))
+        self.assertEqual(files.list(), ['testfile'])
+        self.assertEqual(files.find('test*'), ['testfile'])
+        files.remove('testfile')
+        self.assertEqual(files.list(), [])
 
     def test_filelike_append(self):
         data = BytesIO(b'thedogjumpsoverthelazyfox' * 1000)
