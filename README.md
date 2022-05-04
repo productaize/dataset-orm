@@ -9,6 +9,23 @@ ORM) - if you need one you are left with the complexity that is sqlalchemy.
 
 Enter dataset-orm
 
+Features
+--------
+
+* class-based ORM models (backed by SQLAlchemy, just without the complexity)
+* dynamic ORM models from existing tables or in-code table specs
+* create rows from Python objects
+* get back Python objects using Model.objects.all()/find()/get() or by native SQL 
+* stores dicts as json, files as binary automatically
+
+dataset-orm also includes a file-system alike that works with any SQL database supported by SQlAlchemy. This is useful 
+for all cloud-deployed and other 12-factor applications that cannot use a server's native file system.  
+
+* transparent in-database storage for files of any size
+* files can be stored inside ORM Models or by using the files API from anywhere (a Model is not required)
+* simple put()/get() semantics with automatic filename generation (optional) 
+* parallelized writing and reading provides up to 25% speed-up to binary fields
+
 How?
 ----
 
@@ -76,6 +93,9 @@ Store and access any data types, including json and binary values
         user.picture = fimg.read()  
         user.save()
 
+File-like Storage
+-----------------
+
 Use the file column type for transparently storing binary data:
 
     class Image(Model):
@@ -121,3 +141,9 @@ The convenience methods `put()` and `get()` allow for an even simpler use of the
     files.put(b'some data', 'myfile')
     data = files.get('myfile').read()
     => b'some data'
+
+DBMS Support
+------------
+
+* Currently tested against SQLite, SQL Server
+* Should work with any DBMS supported by SQLAlchemy

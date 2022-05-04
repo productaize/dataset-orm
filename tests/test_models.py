@@ -173,6 +173,13 @@ class DatasetOrmTests(TestCase):
         user = User.objects.get(username='john')
         self.assertEqual(user.data, b'hello world')
 
+    def test_binary_explicit(self):
+        user = User(username='john')
+        user.data = b'hello world'
+        user.save()
+        user = User.objects.get(username='john')
+        self.assertEqual(user.data, b'hello world')
+
     def test_boolean(self):
         User(username='john', is_nice=True).save()
         user = User.objects.get(username='john')
