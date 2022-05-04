@@ -92,7 +92,7 @@ class Column:
         return key
 
     def __repr__(self):
-        return f'Column(db_type={self.db_type}, name={self.name}'
+        return f'Column(db_type={self.db_type}, name={self.name})'
 
     class ColumnTypes(dataset.types.Types):
         json = JSON

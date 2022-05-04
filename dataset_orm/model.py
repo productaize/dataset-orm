@@ -1,5 +1,4 @@
 import re
-from copy import copy
 
 import dataset
 from dataset import Table
@@ -176,7 +175,8 @@ class Model:
 
         # if you don't like classes
         Customer = Model.from_spec(name='Customer',
-                                   columns=Column(types.string, 'name', db)
+                                   columns=[Column(types.string, 'name')],
+                                   db=db)
     """
     _all_models = set()
     _spec_cls = TableSpec
