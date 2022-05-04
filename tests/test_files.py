@@ -53,11 +53,19 @@ class DatasetFileTests(unittest.TestCase):
         with DatasetFile.open('testfile', 'w') as testf:
             testf.write(data)
         self.assertTrue(len(DatasetFilePart.objects.all().as_list()) > 0)
+        # reading whole file
         with DatasetFile.open('testfile') as testf:
             read_back = testf.read()
         self.assertEqual(data.getvalue(), read_back)
         self.assertEqual(testf.size, len(data.getvalue()))
         self.assertEqual(testf.size, len(read_back))
+        # reading chunks, one by one
+        with DatasetFile.open('testfile') as testf:
+            data_ = BytesIO()
+            for chunk in testf.readchunks():
+                self.assertIsInstance(chunk, bytes)
+                data_.write(chunk)
+            self.assertEqual(data_.getvalue(), data.getvalue())
 
     def test_files_api(self):
         from dataset_orm import files
@@ -113,6 +121,26 @@ class DatasetFileTests(unittest.TestCase):
             testf.write(data)
         self.assertEqual(DatasetFile.list(), ['testfile', 'otherfile'])
 
+    def test_putget_explicit(self):
+        from dataset_orm import files
+        data = BytesIO(b'thedogjumpsoverthelazyfox')
+        dsfile = files.put(data, filename='foo')
+        self.assertIsInstance(dsfile, FileLike)
+        dsfile = files.get('foo')
+        self.assertIsInstance(dsfile, FileLike)
+        data_ = dsfile.read()
+        self.assertEqual(data_, data.getvalue())
+
+    def test_putget_implicit(self):
+        from dataset_orm import files
+        data = BytesIO(b'thedogjumpsoverthelazyfox')
+        dsfile = files.put(data)
+        self.assertIsInstance(dsfile, FileLike)
+        dsfile = files.get(dsfile.name)
+        self.assertIsInstance(dsfile, FileLike)
+        data_ = dsfile.read()
+        self.assertEqual(data_, data.getvalue())
+
     def test_imagemodel_file_column(self):
         aimage = Image()
         aimage.imagefile.write(b'foo')
@@ -155,7 +183,7 @@ class DatasetFileTests(unittest.TestCase):
 
         t_seq = timeit(partial(write, chunksize=-1), number=1)
         t_small = timeit(partial(write, chunksize=255), number=1)
-        t_large = timeit(partial(write, chunksize=1024*512), number=1)
+        t_large = timeit(partial(write, chunksize=1024 * 512), number=1)
         print(t_seq, t_small, t_large)
 
     @skip("for interactive use only")
@@ -177,14 +205,11 @@ class DatasetFileTests(unittest.TestCase):
         N = 30
         write(chunksize=-1)
         t_seq = timeit(read, number=N)
-        write(chunksize=1024*512)
+        write(chunksize=1024 * 512)
         t_small = timeit(read, number=N)
-        write(chunksize=1024*256)
+        write(chunksize=1024 * 256)
         t_large = timeit(read, number=N)
         print(t_seq, t_small, t_large)
-
-    if __name__ == '__main__':
-        unittest.main()
 
 
 if __name__ == '__main__':
