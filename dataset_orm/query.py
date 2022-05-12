@@ -10,21 +10,26 @@ class ModelQuery:
     Model.objects.all().nocache().
     """
 
-    def __init__(self, model=None):
+    def __init__(self, model=None, **filter):
         self.model = model
+        self.filter = filter
 
     def __set_name__(self, model, name):
         self.model = model
 
+    def __call__(self, *args, **kwargs):
+        return ModelQuery(model=self.model, **kwargs)
+
     def all(self, **kwargs):
         kwargs.setdefault('order_by', self.model._spec.primary_id)
+        kwargs.update(self.filter)
         kwargs.update(**kwargs)
         query = lambda: (self.model._from_db(**row) for row in self.model.table.all(**kwargs)) # noqa
         return QueryResult(query)
 
     def find(self, *_clauses, **kwargs):
         """ Return all model instances for the given clause """
-        self._build_query_clauses(kwargs)
+        _clauses, kwargs = self._build_query_clauses(_clauses, kwargs)
         kwargs.setdefault('order_by', self.model._spec.primary_id)
         kwargs.update(**kwargs)
         query = lambda: (self.model._from_db(**row) for row in self.model.table.find(*_clauses, **kwargs)) # noqa
@@ -32,11 +37,12 @@ class ModelQuery:
 
     def find_one(self, *_clauses, **kwargs):
         """ Return a single model instance for the given clause """
+        _clauses, kwargs = self._build_query_clauses(_clauses, kwargs)
         return self.get(*_clauses, **kwargs)
 
     def get(self, *_clauses, **kwargs):
         """ Return a single model instance for the given clause """
-        self._build_query_clauses(kwargs)
+        _clauses, kwargs = self._build_query_clauses(_clauses, kwargs)
         kwargs.setdefault('order_by', self.model._spec.primary_id)
         if 'pk' in kwargs:
             kwargs['id'] = kwargs.pop('pk')
@@ -72,17 +78,32 @@ class ModelQuery:
         query = lambda: (model._from_db(**row) for row in result) # noqa
         return QueryResult(query)
 
-    def _build_query_clauses(self, kwargs):
+    def _build_query_clauses(self, clauses, kwargs):
         # enable django-style column__op=value filters
+        clauses = list(clauses)
         for k, v in dict(kwargs).items():
             if '__' in k:
                 column, op = k.split('__')
-                kwargs.pop(k)
-                kwargs[column] = {op: v}
+                if op == 'regexp':
+                    # dataset.Table does not support REGEXP, use SQA table, if supported by db dialect
+                    # https://github.com/pudo/dataset/blob/7e921501f6ad90bedc3c3b66d0effccbb0ea0146/dataset/table.py#L389
+                    # https://docs.sqlalchemy.org/en/14/core/operators.html#string-matching
+                    # model.table: dataset.Table
+                    # model.table.table: sqa.Table
+                    sqatable = self.model.table.table
+                    clauses.append(sqatable.c[column].regexp_match(v))
+                    kwargs.pop(k)
+                elif op == 'match':
+                    # dataset.Table does not support MATCH, use SQA table
+                    # https://github.com/pudo/dataset/blob/7e921501f6ad90bedc3c3b66d0effccbb0ea0146/dataset/table.py#L389
+                    # https://docs.sqlalchemy.org/en/14/core/operators.html#string-matching
+                    sqatable = self.model.table.table
+                    clauses.append(sqatable.c[column].match(v))
+                    kwargs.pop(k)
             if k == 'pk':
                 kwargs.pop(k)
                 kwargs[self.model._spec.primary_id] = v
-        return kwargs
+        return clauses, kwargs
 
 
 class QueryResult:

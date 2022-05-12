@@ -1,4 +1,6 @@
+import json
 import re
+from contextlib import contextmanager
 
 import dataset
 from dataset import Table
@@ -82,15 +84,33 @@ class TableSpec:
     def __set_name__(self, model, name):
         camel2snake = lambda v: re.sub(r'(?<!^)(?=[A-Z])', '_', v).lower()  # noqa
         self.model = model
-        if not hasattr(model, '_spec'):
+        if getattr(model, '_spec', None) is None:
             model._spec_init()
         self.table_name = camel2snake(self.table_name or model.__name__)
         Model._all_models.add(self.model)
 
+    @property
+    def db(self):
+        return self.model._db
+
+    @property
+    def dbkind(self):
+        """ returns the database type as a string (aka dialect)
+
+        Returns:
+            * 'mssql' for MS SQL Server
+            * 'postgresql' for Postgres
+            * 'sqlite' for SQLite
+
+        See Also:
+            * https://docs.sqlalchemy.org/en/14/core/internals.html#sqlalchemy.engine.Dialect
+        """
+        return self.db.engine.dialect.name
+
     def create_table(self):
-        db = self.model._db
+        db = self.db
         if self.model and self.table_obj is None:
-            self.table_obj = Table(self.model._db, self.table_name,
+            self.table_obj = Table(db, self.table_name,
                                    primary_id=self.primary_id,
                                    primary_type=self.primary_type,
                                    primary_increment=self.primary_increment,
@@ -106,7 +126,7 @@ class TableSpec:
         return self
 
     def drop_table(self):
-        table = self.table_obj or self.model._db[self.table_name]
+        table = self.table_obj or self.db[self.table_name]
         table.drop()
         self.table_obj = None
 
@@ -181,12 +201,13 @@ class Model:
     _all_models = set()
     _spec_cls = TableSpec
     _objects_cls = ModelQuery
+    _db = None
 
     def __init__(self, **values):
         columns = self.columns
         self.__dict__['_values'] = {
             k: v for k, v in values.items()
-            if k in columns or k == self._spec.primary_id
+            if v is not None and (k in columns or k == self._spec.primary_id)
         }
         for k, col in columns.items():
             if k == self._spec.primary_id:
@@ -194,41 +215,77 @@ class Model:
             self.__dict__['_values'].setdefault(k, col.default)
 
     @classmethod
-    def from_table(cls, table):
-        model = type(table.name, (Model,), dict())
+    def from_table(cls, table, bases=None):
+        bases = bases or (Model,)
+        model = type(table.name, bases, dict())
         model.use(table.db)
         model._spec.sync_table(table, model)
         return model
 
     @classmethod
-    def from_spec(cls, name, columns, db):
+    def from_spec(cls, name, columns, db, bases=None):
         table = db[name]
         for column in columns:
             table.create_column(column.name, column.db_type)
-        return cls.from_table(table)
+        return cls.from_table(table, bases=bases)
 
     @classmethod
-    def _spec_init(cls):
+    def from_json(cls, s):
+        return cls(**json.loads(s))
+
+    @classmethod
+    def _spec_init(cls, _columns=None):
         # should be in a metaclass, kept here for simplicity
-        if not hasattr(cls, '_spec'):
+        if getattr(cls, '_spec', None) is None:
             setattr(cls, '_db', None)
             setattr(cls, '_spec', cls._spec_cls())
             setattr(cls, 'objects', cls._objects_cls())
             cls._spec.__set_name__(cls, '_spec')
             cls.objects.__set_name__(cls, 'objects')
-        cls._spec.columns = cls._spec.columns
         cls._spec.table_obj = None
+        if _columns:
+            cls._spec.columns = _columns
+            for name, col in _columns.items():
+                setattr(cls, name, col)
+                col.__set_name__(cls, name)
 
     # user api
     @classmethod
-    def use(cls, db, recreate=False):
+    def use(cls, db, recreate=False, _columns=None):
         """ links the Model with a dataset.Table """
-        cls._spec_init()
+        cls._spec_init(_columns=_columns)
         cls._db = db
         if recreate:
             cls._spec.drop_table()
         if cls._spec.auto_create:
             cls._spec.create_table()
+
+    @classmethod
+    @contextmanager
+    def using(cls, db):
+        from dataset_orm.util import DBContext
+        model = cls._make_using(db)
+        yield DBContext({
+            model.__name__: model
+        })
+        Model._all_models.remove(model)
+
+    @classmethod
+    def _make_using(cls, db, recreate=False):
+        if cls._db == db:
+            return cls
+        # create a new Model
+        model = type(f'{cls.__name__}', (cls,), dict())
+        # ensure we get a fresh TableSpec, by cloning existing columns
+        model._spec = None
+        _new_columns = {
+            name: Column(db_type=col.db_type, name=col.name,
+                         on_update=col.orm_column_kwargs.get('on_update'),
+                         model=model)
+            for name, col in cls.columns.items()
+        }
+        model.use(db, recreate=recreate, _columns=_new_columns)
+        return model
 
     @classproperty
     def objects(cls):
@@ -283,7 +340,7 @@ class Model:
             if not isinstance(pk, bool):
                 setattr(self, self._spec.primary_id, pk)
         else:
-            self.table.upsert(self._to_db(), [self._spec.primary_id])
+            self.table.upsert(self._to_db(update=True), [self._spec.primary_id])
         return self
 
     def refresh(self):
@@ -295,9 +352,14 @@ class Model:
     def delete(self):
         return self.table.delete(**{self._spec.primary_id: self.pk})
 
-    def to_dict(self):
+    def to_dict(self, serializable=False):
         """ return a dict of all column values """
-        return self._values
+        return dict(self._values) if not serializable else self._to_db()
+
+    def to_json(self, **kwargs):
+        # ready to store outside python
+        from dataset_orm.util import SpecialEncoder
+        return json.dumps(self.to_dict(serializable=True), cls=SpecialEncoder)
 
     # internal api
     @classmethod
@@ -308,9 +370,12 @@ class Model:
     def _values(self):
         return self.__dict__.setdefault('_values', {})
 
-    def _to_db(self, drop=None):
+    def _to_db(self, drop=None, update=False):
         drop = drop or []
-        return {k: f.to_db(self._values.get(k)) for k, f in self._spec.columns.items() if k not in drop}
+        maybe_update = lambda f, value: value if not update else f.on_update(value)  # noqa
+        return {k: f.to_db(maybe_update(f, self._values.get(k)))
+                for k, f in self._spec.columns.items()
+                if k not in drop}
 
     def _to_python(self, values):
         return {k: f.to_python(values[k]) for k, f in self._spec.columns.items()}
@@ -318,6 +383,8 @@ class Model:
     # column values as attributes
     def __getattr__(self, k):
         k = k.replace('pk', self.__class__._spec.primary_id)
+        if k not in self._values and k not in self.__dict__:
+            raise AttributeError(k)
         return self._values[k] if k in self._values else self.__dict__[k]
 
     def __setattr__(self, k, v):
@@ -327,7 +394,12 @@ class Model:
             self.__dict__[k] = v
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}(pk={self.pk})>'
+        def short():
+            col = list(self.columns)[0]
+            value = getattr(self, col)
+            return f',{col}={value}' if len(self.columns) > 1 else ''
+
+        return f'<{self.__class__.__name__}(pk={self.pk}{short()})>'
 
 
 class ResultModel(Model):
@@ -338,7 +410,7 @@ class ResultModel(Model):
     @classmethod
     def use(cls, db, **kwargs):
         cls._db = db
-        cls._spec.columns = cls._spec.columns
+        # cls._spec.columns = cls._spec.columns
 
     @classmethod
     def _from_db(cls, **values):

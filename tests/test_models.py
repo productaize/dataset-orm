@@ -24,6 +24,16 @@ class DatasetOrmTests(TestCase):
         self.assertEqual(user2.username, 'john')
         self.assertEqual(User.objects.all().count(), 1)
         self.assertEqual(user.to_dict(), user._values)
+        self.assertIsInstance(user2.created_dt, datetime)
+        self.assertIsNone(user2.modified_dt)
+        self.assertIsNone(user2.updated_date)
+
+    def test_model_update_retrieve(self):
+        user1 = User(username='john').save().refresh()
+        user2 = User.objects.get(id=user1.pk).save().refresh()
+        user3 = User.objects.get(id=user1.pk).save().refresh()
+        self.assertNotEqual(user1.modified_dt, user2.modified_dt)
+        self.assertNotEqual(user2.modified_dt, user3.modified_dt)
 
     def test_multiple_models(self):
         user = User(username='john').save()
@@ -118,6 +128,14 @@ class DatasetOrmTests(TestCase):
         users = User.objects.find(username__in=['gil', 'john'])
         self.assertEqual(len(users), 2)
 
+    def test_find_models_query_regexp(self):
+        if User._spec.dbkind == 'mssql':
+            self.skipTest("mssql does not support the REGEXP operator. Use LIKE instead")
+        User(username='gil').save()
+        # find users by regexp
+        users = User.objects.find(username__regexp='.*il$')
+        self.assertEqual(len(users), 1)
+
     def test_find_models_caching(self):
         User(username='john').save()
         User(username='gil').save()
@@ -151,11 +169,24 @@ class DatasetOrmTests(TestCase):
         user = User.objects.get(username='john')
         self.assertEqual(user.attributes, dict(foo=5))
 
-    def test_datetime(self):
-        now = datetime(2022, 3, 25, 11, 53, 45)
-        User(username='john', created_dt=now).save()
+    def test_json_datetime(self):
+        from datetime import datetime as dt
+        dt = dt.now()
+        User(username='john', attributes=dict(created=dt)).save()
         user = User.objects.get(username='john')
-        self.assertEqual(user.created_dt.isoformat(), now.isoformat())
+        self.assertEqual(user.attributes, dict(created=dt))
+
+    def test_json_bytes(self):
+        data = b'thequickbrownfox'
+        User(username='john', attributes=dict(data=data)).save()
+        user = User.objects.get(username='john')
+        self.assertEqual(user.attributes, dict(data=data))
+
+    def test_datetime(self):
+        nowdt = datetime(2022, 3, 25, 11, 53, 45)
+        User(username='john', created_dt=nowdt).save()
+        user = User.objects.get(username='john')
+        self.assertEqual(user.created_dt.isoformat(), nowdt.isoformat())
 
     def test_date(self):
         now = date(2022, 3, 25)
@@ -286,6 +317,15 @@ class DatasetOrmTests(TestCase):
             self.assertIsInstance(country, Country)
             self.assertIn('name', country.to_dict())
             self.assertIn('name', country.columns)
+
+    def test_model_default_kwargs_unchanged(self):
+        from tests.examples import User
+        user1 = User(username='John').save()
+        self.assertEqual(user1.attributes, {})
+        user1.attributes.update({'default': 'bar'})
+        user1.save()
+        user2 = User(username='Mike').save()
+        self.assertEqual(user2.attributes, {})
 
 
 def check_sql(db, sql):

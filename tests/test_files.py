@@ -3,7 +3,6 @@ import unittest
 from functools import partial
 from io import BytesIO
 from timeit import timeit
-
 from unittest import skip
 
 from dataset_orm import connect
@@ -15,10 +14,6 @@ class DatasetFileTests(unittest.TestCase):
     def setUp(self):
         db_url = os.environ.get('TEST_DATABASE_URL', 'sqlite:///testdb.sqlite3')
         self.db = connect(db_url, recreate=True)
-        print(db_url)
-
-    def tearDown(self):
-        self.db.close()
 
     def test_filemodel_bare(self):
         # bare chunking / read back test
@@ -67,6 +62,16 @@ class DatasetFileTests(unittest.TestCase):
                 data_.write(chunk)
             self.assertEqual(data_.getvalue(), data.getvalue())
 
+    def test_filelike_directories(self):
+        data = BytesIO(b'thedogjumpsoverthelazyfox')
+        with DatasetFile.open('some/path/to/testfile', 'w') as testf:
+            testf.write(data)
+        self.assertTrue(len(DatasetFilePart.objects.all().as_list()) > 0)
+        self.assertIn('some/path/to/testfile', [f.filename for f in DatasetFile.objects.all()])
+        with DatasetFile.open('some/path/to/testfile') as testf:
+            testf.remove()
+        self.assertNotIn('some/path/to/testfile', [f.filename for f in DatasetFile.objects.all()])
+
     def test_files_api(self):
         from dataset_orm import files
         data = b'foobar'
@@ -112,6 +117,20 @@ class DatasetFileTests(unittest.TestCase):
         with DatasetFile.open('testfile', 'w') as testf:
             testf.write(data)
         self.assertEqual(DatasetFile.find('test*'), ['testfile'])
+
+    def test_drop_read_filelike(self):
+        # create a file, drop it, try reading, write again
+        from dataset_orm import files
+        data = BytesIO(b'thedogjumpsoverthelazyfox' * 10000)
+        filelike = files.put(data)
+        self.assertEqual(DatasetFile.list(), [filelike.name])
+        self.assertEqual(filelike.read(), data.getvalue())
+        filelike.remove()
+        with self.assertRaises(FileNotFoundError):
+            self.assertEqual(filelike.read(), data.getvalue())
+        with filelike.open('w') as testf:
+            testf.write(data)
+        self.assertEqual(DatasetFile.list(), [filelike.name])
 
     def test_list(self):
         data = BytesIO(b'thedogjumpsoverthelazyfox' * 10000)
@@ -162,7 +181,7 @@ class DatasetFileTests(unittest.TestCase):
         cimage = Image.objects.get(id=aimage.id)
         self.assertEqual(b'foofoo', cimage.imagefile.read())
         # overwrite
-        bimage.imagefile.truncate().write(b'foo')
+        bimage.imagefile.open('w').truncate().write(b'foo')
         bimage.save()
         cimage = Image.objects.get(id=aimage.id)
         self.assertEqual(cimage.imagefile.read(), b'foo')
@@ -195,12 +214,13 @@ class DatasetFileTests(unittest.TestCase):
 
         def write(chunksize=None):
             with open('/tmp/testfile', 'rb') as fin:
-                with DatasetFile.open(f'testfile', 'w') as testf:
+                with DatasetFile.open('testfile', 'w') as testf:
                     testf.write(fin, chunksize=chunksize)
 
         def read(chunksize=None):
-            with DatasetFile.open(f'testfile', 'r') as testf:
+            with DatasetFile.open('testfile', 'r') as testf:
                 data = testf.read()
+            return data
 
         N = 30
         write(chunksize=-1)

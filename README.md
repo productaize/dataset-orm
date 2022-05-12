@@ -15,8 +15,9 @@ Features
 * class-based ORM models (backed by SQLAlchemy, just without the complexity)
 * dynamic ORM models from existing tables or in-code table specs
 * create rows from Python objects
-* get back Python objects using Model.objects.all()/find()/get() or by native SQL 
+* get back Python objects using Model.objects.all()/find()/get() or by native SQL
 * stores dicts as json, files as binary automatically
+* use multiple databases with the same ORM models, concurrently
 
 dataset-orm also includes a file-system alike that works with any SQL database supported by SQlAlchemy. This is useful 
 for all cloud-deployed and other 12-factor applications that cannot use a server's native file system.  
@@ -141,6 +142,32 @@ The convenience methods `put()` and `get()` allow for an even simpler use of the
     files.put(b'some data', 'myfile')
     data = files.get('myfile').read()
     => b'some data'
+
+Using multiple databases
+------------------------
+
+Using multiple databases is straight forward:
+
+    from dataset_orm import connect, using, Model, Column, types
+
+    db1 = connect('sqlite:///db1.sqlite')
+    db2 = connect('sqlite:///db2.sqlite', alias='other')
+
+    class City(Model):
+        name = Column(types.string)
+
+    # this will be saved in db1, since it is the default db (alias='default')
+    City(name='London').save()
+
+    # this will be saved in db2, note how it uses other.City instead of City
+    with using('other') as other:
+        other.City(name='New York').save()
+
+It is also possible to switch db for just one model:
+
+    # this will be saved in db2, note how it uses a different name for the model
+    with City.using(db2) as OtherCity:
+        OtherCity(name='New York').save()
 
 DBMS Support
 ------------
