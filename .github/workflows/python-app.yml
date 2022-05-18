@@ -37,6 +37,7 @@ jobs:
     - name: Test with sqlserver
       run: |
         export TEST_DATABASE_URL="mssql+pyodbc://SA:Denteriarlly8!@localhost/testdb?driver=ODBC+Driver+17+for+SQL+Server&encrypt=no&MARS_Connection=Yes"
+        export TEST_DATABASE_URL2="mssql+pyodbc://SA:Denteriarlly8!@localhost/tempdb?driver=ODBC+Driver+17+for+SQL+Server&encrypt=no&MARS_Connection=Yes"
         pip install -e .[mssql]
         docker-compose down
         docker-compose up -d mssql

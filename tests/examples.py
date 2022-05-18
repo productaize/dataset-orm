@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from dataset_orm import Model, Column, types, ResultModel
 from dataset_orm.model import TableSpec
 
@@ -9,8 +11,9 @@ class User(Model):
     attributes = Column(types.json)
     data = Column(types.binary)
     value = Column(types.float)
-    created_dt = Column(types.datetime)
-    updated_date = Column(types.date)
+    created_dt = Column(types.datetime, default=datetime.now)
+    modified_dt = Column(types.datetime, on_update=datetime.now)
+    updated_date = Column(types.date, on_update=lambda: datetime.now().date())
     is_nice = Column(types.boolean)
 
 
